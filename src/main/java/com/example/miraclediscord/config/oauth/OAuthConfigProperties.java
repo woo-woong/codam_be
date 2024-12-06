@@ -7,16 +7,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 
 public class OAuthConfigProperties {
-    @Value("${spring.oauth2.client.registration.kakao.client-id}")
-    private static String kakaoClientId;
-
-    @Value("${spring.oauth2.client.registration.kakao.client-secret}")
-    private static String kakaoClientSecret;
+    @Value("${KAKAO_CLIENT_ID}")
+    private String kakaoClientId;
 
 
     public static final Map<SocialProvider, OAuthConfig> OAUTH_CONFIGS = Map.of(
         SocialProvider.GOOGLE, new OAuthConfig(
-            "clientID",
+            "${KAKAO_CLIENT_ID}",
             "clientSecret",
             "http://localhost:3000/login/oauth2/code/google",
             "https://oauth2.googleapis.com/token",
