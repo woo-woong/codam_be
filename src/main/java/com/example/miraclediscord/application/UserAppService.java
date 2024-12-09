@@ -47,4 +47,8 @@ public class UserAppService {
         }
     }
 
+    public void logout(HttpServletResponse response) {
+        cookieManager.removeJwtCookie(response);
+    }
+
 }
