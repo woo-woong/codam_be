@@ -1,6 +1,6 @@
-package com.example.miraclediscord.model.entity;
+package com.example.miraclediscord.model.entity.user;
 
-import com.example.miraclediscord.model.entity.common.BaseTimeEntity;
+import com.example.miraclediscord.model.entity.SocialProvider;
 import jakarta.persistence.*;
 import lombok.*;
 

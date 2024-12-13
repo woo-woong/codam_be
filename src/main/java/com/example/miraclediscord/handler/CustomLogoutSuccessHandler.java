@@ -1,48 +1,51 @@
 package com.example.miraclediscord.handler;
 
-
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.miraclediscord.application.RefreshTokenService;
+import com.example.miraclediscord.config.cookie.CookieManager;
+import com.example.miraclediscord.model.entity.user.CustomUser;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class CustomLogoutSuccessHandler implements LogoutSuccessHandler {
 
-    private final ObjectMapper objectMapper;  // JSON 변환을 위한 매퍼
+    private final RefreshTokenService refreshTokenService;
+    private final CookieManager cookieManager;
 
     @Override
-    public void onLogoutSuccess(
-        HttpServletRequest request,
-        HttpServletResponse response,
-        Authentication authentication) throws IOException {
+    public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
+        System.out.println("여기는 커스텀 로그아웃");
 
-        response.setStatus(HttpStatus.OK.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
+        // 쿠키 또는 헤더에서 RefreshToken 가져오기
+        String refreshToken = cookieManager.getCookieValue(request, "refresh_token"); // 쿠키에서 가져오기 예시
 
-        Map<String, String> result = new HashMap<>();
-        result.put("message", "로그아웃 되었습니다.");
-        result.put("timestamp", LocalDateTime.now().toString());
-
-        // 로그아웃한 사용자 정보가 있다면 포함
-        if (authentication != null && authentication.getPrincipal() != null) {
-            result.put("username", authentication.getName());
+        if (refreshToken != null) {
+            try {
+                // RefreshToken DB에서 제거
+                refreshTokenService.deleteRefreshToken(refreshToken);
+            } catch (Exception e) {
+                log.error("Failed to delete refresh token from database", e);
+            }
+        } else {
+            log.warn("No refresh token found in request");
         }
 
-        // JSON 응답 생성
-        String jsonResult = objectMapper.writeValueAsString(result);
-        response.getWriter().write(jsonResult);
-        response.getWriter().flush();
+        // 쿠키 삭제
+        response.addCookie(cookieManager.createExpiredAccessTokenCookie());
+        response.addCookie(cookieManager.createExpiredRefreshTokenCookie());
+
+        // 로그아웃 성공 응답
+        response.setStatus(HttpServletResponse.SC_NO_CONTENT);
     }
+
+
+
 }

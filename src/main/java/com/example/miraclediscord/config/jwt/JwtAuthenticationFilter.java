@@ -1,7 +1,10 @@
 package com.example.miraclediscord.config.jwt;
 
-
-import com.example.miraclediscord.dto.custom.CustomUser;
+import com.example.miraclediscord.application.UserAppService;
+import com.example.miraclediscord.config.cookie.CookieManager;
+import com.example.miraclediscord.model.entity.user.CustomUser;
+import com.example.miraclediscord.model.repository.RefreshTokenRepository;
+import com.example.miraclediscord.model.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -9,88 +12,121 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
-import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final AntPathMatcher pathMatcher = new AntPathMatcher();
-
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String[] excludePath = {"/login/**", "/signup/**", "/finance/**"};
-        String path = request.getRequestURI();
-        return pathMatcher.match(excludePath[0], path) ||
-            pathMatcher.match(excludePath[1], path) ||
-            pathMatcher.match(excludePath[2], path);
-
-    }
+    private final JwtProvider jwtProvider;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final CookieManager cookieManager;
+    private final UserAppService userAppService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
         FilterChain filterChain) throws ServletException, IOException {
-        System.out.println("JWT Filter 실행");
 
         Cookie[] cookies = request.getCookies();
-
         if (cookies == null) {
+            clearAuthenticationWithoutDB(response);
             filterChain.doFilter(request, response);
             return;
         }
 
-        String jwtCookie = Arrays.stream(cookies)
-            .filter(cookie -> "jwt".equals(cookie.getName()))
-            .map(Cookie::getValue)
-            .findFirst()
-            .orElse(null);
+        String accessToken = extractToken(cookies, "access_token");
+        String refreshToken = extractToken(cookies, "refresh_token");
 
-        if (jwtCookie == null) {
+        // refresh token이 없는 경우 로그아웃 처리
+        if (refreshToken == null) {
+            clearAuthenticationWithoutDB(response);
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-            Claims claims = JwtProvider.extractToken(jwtCookie);
-            System.out.println(claims.toString());
-            String username = claims.get("username", String.class);
+            // refresh token으로 사용자 찾기
+            Claims refreshClaims = jwtProvider.extractAllClaims(refreshToken);
+            String userEmail = refreshClaims.get("email", String.class);
 
-            // authorities 처리
-            String[] authorities = claims.get("authorities", String.class).split(",");
-            List<SimpleGrantedAuthority> grantedAuthorities = Arrays.stream(authorities)
+            if (accessToken == null) {
+                String newAccessToken = userAppService.refreshAccessToken(refreshToken);
+                response.addCookie(cookieManager.createAccessTokenCookie(newAccessToken));
+                accessToken = newAccessToken;
+            }
+
+            Claims claims = jwtProvider.extractAllClaims(accessToken);
+
+            if (jwtProvider.isTokenExpired(accessToken)) {
+                clearAuthenticationWithDB(response, refreshToken);
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+            }
+
+            String email = claims.get("email", String.class);
+            String authoritiesStr = claims.get("authorities", String.class);
+
+            List<GrantedAuthority> authorities = Arrays.stream(authoritiesStr.split(","))
                 .map(SimpleGrantedAuthority::new)
-                .toList();
+                .collect(Collectors.toList());
 
-            // CustomUser 객체 생성
-            CustomUser customUser = new CustomUser(
-                username,
-                "none",  // password는 보안상 비워둠
-                grantedAuthorities
-            );
+            CustomUser userDetails = new CustomUser(email, "", authorities);
 
-            // 추가 정보 설정
-            if (claims.get("name") != null) customUser.setName(claims.get("name", String.class));
-
-            // Authentication 객체 생성 및 설정
             UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(customUser, null, grantedAuthorities);
+                new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
+
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
         } catch (Exception e) {
-            System.out.println("JWT 처리 중 에러 발생: " + e.getMessage());
-            SecurityContextHolder.clearContext();
+            if (refreshToken != null) {
+                clearAuthenticationWithDB(response, refreshToken);
+            } else {
+                clearAuthenticationWithoutDB(response);
+            }
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void clearAuthenticationWithDB(HttpServletResponse response, String refreshToken) {
+        SecurityContextHolder.clearContext();
+
+        try {
+            // RefreshTokenRepository에서 토큰 삭제
+            refreshTokenRepository.deleteByToken(refreshToken);
+        } catch (Exception e) {
+            log.error("Failed to delete refresh token from database", e);
+        }
+
+        response.addCookie(cookieManager.createExpiredAccessTokenCookie());
+        response.addCookie(cookieManager.createExpiredRefreshTokenCookie());
+    }
+
+    private void clearAuthenticationWithoutDB(HttpServletResponse response) {
+        SecurityContextHolder.clearContext();
+        response.addCookie(cookieManager.createExpiredAccessTokenCookie());
+        response.addCookie(cookieManager.createExpiredRefreshTokenCookie());
+    }
+
+    private String extractToken(Cookie[] cookies, String tokenName) {
+        return Arrays.stream(cookies)
+            .filter(cookie -> tokenName.equals(cookie.getName()))
+            .map(Cookie::getValue)
+            .findFirst()
+            .orElse(null);
     }
 }

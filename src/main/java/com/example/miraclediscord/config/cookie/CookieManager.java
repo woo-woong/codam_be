@@ -1,35 +1,87 @@
 package com.example.miraclediscord.config.cookie;
 
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 public class CookieManager {
-    private final CookieProperties properties;
+    private final CookieProperties accessTokenCookieProperties;
+    private final CookieProperties refreshTokenCookieProperties;
 
-    public CookieManager(CookieProperties properties) {
-        this.properties = properties;
+    public CookieManager(
+        CookieProperties accessTokenCookieProperties,
+        CookieProperties refreshTokenCookieProperties
+    ) {
+        this.accessTokenCookieProperties = accessTokenCookieProperties;
+        this.refreshTokenCookieProperties = refreshTokenCookieProperties;
     }
 
-    public Cookie createJwtCookie(String token) {
-        Cookie cookie = new Cookie(properties.getName(), token);
-        cookie.setMaxAge(properties.getMaxAge());
-        cookie.setHttpOnly(properties.isHttpOnly());
-        cookie.setSecure(properties.isSecure());
-        cookie.setPath(properties.getPath());
+    public Cookie createAccessTokenCookie(String token) {
+        return createCookie(
+            accessTokenCookieProperties.getName(),
+            token,
+            accessTokenCookieProperties.getMaxAge()
+        );
+    }
+
+    public Cookie createRefreshTokenCookie(String token) {
+        return createCookie(
+            refreshTokenCookieProperties.getName(),
+            token,
+            refreshTokenCookieProperties.getMaxAge()
+        );
+    }
+
+    public Cookie createExpiredAccessTokenCookie() {
+        Cookie cookie = new Cookie(accessTokenCookieProperties.getName(), null);
+        cookie.setMaxAge(0);
+        cookie.setPath("/");
+        cookie.setSecure(true);
+        cookie.setHttpOnly(true);
         return cookie;
     }
 
-    public void removeJwtCookie(HttpServletResponse response) {
-        // JWT 쿠키 만료
-        Cookie expiredCookie = new Cookie(properties.getName(), null);
-        expiredCookie.setMaxAge(0);  // 쿠키 즉시 만료
-        expiredCookie.setPath(properties.getPath());
-        response.addCookie(expiredCookie);
-
-        // 보안 컨텍스트 클리어
-        SecurityContextHolder.clearContext();
+    public Cookie createExpiredRefreshTokenCookie() {
+        Cookie cookie = new Cookie(refreshTokenCookieProperties.getName(), null);
+        cookie.setMaxAge(0);
+        cookie.setPath("/");
+        cookie.setSecure(true);
+        cookie.setHttpOnly(true);
+        return cookie;
     }
 
+    private Cookie createCookie(String name, String value, int maxAge) {
+        Cookie cookie = new Cookie(name, value);
+        cookie.setMaxAge(maxAge);
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true);
+        cookie.setPath("/");
+        return cookie;
+    }
 
+    public void removeAccessTokenCookie(HttpServletResponse response) {
+        removeCookie(response, accessTokenCookieProperties.getName());
+    }
+
+    public void removeRefreshTokenCookie(HttpServletResponse response) {
+        removeCookie(response, refreshTokenCookieProperties.getName());
+    }
+
+    private void removeCookie(HttpServletResponse response, String name) {
+        Cookie cookie = new Cookie(name, null);
+        cookie.setMaxAge(0);
+        cookie.setPath("/");
+        response.addCookie(cookie);
+    }
+
+    public String getCookieValue(HttpServletRequest request, String cookieName) {
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                if (cookie.getName().equals(cookieName)) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        return null;
+    }
 }

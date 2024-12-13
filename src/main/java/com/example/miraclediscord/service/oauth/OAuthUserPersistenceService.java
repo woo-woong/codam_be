@@ -1,6 +1,6 @@
 package com.example.miraclediscord.service.oauth;
 
-import com.example.miraclediscord.model.entity.User;
+import com.example.miraclediscord.model.entity.user.User;
 import com.example.miraclediscord.model.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

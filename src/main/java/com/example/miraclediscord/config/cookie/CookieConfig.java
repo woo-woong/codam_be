@@ -1,5 +1,6 @@
 package com.example.miraclediscord.config.cookie;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -7,9 +8,10 @@ import org.springframework.context.annotation.Configuration;
 public class CookieConfig {
 
     @Bean
-    public CookieProperties jwtCookieProperties() {
+    @Qualifier("accessTokenCookieProperties")
+    public CookieProperties accessTokenCookieProperties() {
         return CookieProperties.builder()
-            .name("jwt")
+            .name("access_token")
             .maxAge(900) // 15 minutes
             .httpOnly(true)
             .secure(true)
@@ -18,7 +20,25 @@ public class CookieConfig {
     }
 
     @Bean
-    public CookieManager cookieManager(CookieProperties jwtCookieProperties) {
-        return new CookieManager(jwtCookieProperties);
+    @Qualifier("refreshTokenCookieProperties")
+    public CookieProperties refreshTokenCookieProperties() {
+        return CookieProperties.builder()
+            .name("refresh_token")
+            .maxAge(14 * 24 * 60 * 60) // 14 days
+            .httpOnly(true)
+            .secure(true)
+            .path("/")
+            .build();
+    }
+
+    @Bean
+    public CookieManager cookieManager(
+        @Qualifier("accessTokenCookieProperties") CookieProperties accessTokenCookieProperties,
+        @Qualifier("refreshTokenCookieProperties") CookieProperties refreshTokenCookieProperties
+    ) {
+        return new CookieManager(
+            accessTokenCookieProperties,
+            refreshTokenCookieProperties
+        );
     }
 }

@@ -2,9 +2,7 @@ package com.example.miraclediscord.dto.response;
 
 
 import com.example.miraclediscord.config.oauth.OAuthToken;
-import com.example.miraclediscord.model.entity.User;
-import com.fasterxml.jackson.annotation.JsonFormat;
-import java.time.LocalDate;
+import com.example.miraclediscord.model.entity.user.User;
 import lombok.Builder;
 import lombok.Data;
 import lombok.Getter;
@@ -30,14 +28,12 @@ public class UserResponse {
     public static class Login{
         private String status;
         private String message;
-        private OAuthToken token;
         private User oAuthUser;
 
-        public static Login from(String status, String message, OAuthToken token, User oAuthUser) {
+        public static Login from(String status, String message, User oAuthUser) {
             return Login.builder()
                 .status(status)
                 .message(message)
-                .token(token)
                 .oAuthUser(oAuthUser)
                 .build();
         }

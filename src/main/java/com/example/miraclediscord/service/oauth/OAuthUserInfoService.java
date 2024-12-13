@@ -3,7 +3,7 @@ package com.example.miraclediscord.service.oauth;
 import com.example.miraclediscord.config.oauth.OAuthConfig;
 import com.example.miraclediscord.config.oauth.OAuthConfigProperties;
 import com.example.miraclediscord.model.entity.SocialProvider;
-import com.example.miraclediscord.model.entity.User;
+import com.example.miraclediscord.model.entity.user.User;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
